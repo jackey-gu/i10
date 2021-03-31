@@ -30,9 +30,9 @@
 #include "fabrics.h"
 
 #define I10_CARAVAN_CAPACITY		65536
-#define I10_CARAVAN2_CAPACITY		1024
-#define I10_AGGREGATION_SIZE		16
-#define I10_AGGREGATION_SIZE2		16
+#define I10_CARAVAN2_CAPACITY		1024									//xiugai
+#define I10_AGGREGATION_SIZE		16										
+#define I10_AGGREGATION_SIZE2		16										//xiugai
 #define I10_MIN_DOORBELL_TIMEOUT	25
 
 static int i10_delayed_doorbell_us __read_mostly = 50;
@@ -122,7 +122,7 @@ struct i10_host_queue {
 	struct page		**caravan_mapped;
 	int			nr_mapped;
 
-
+	//xiugai
 	/* For i10 caravans2 */
 	struct kvec		*caravan2_iovs;
 	size_t			caravan2_len;
@@ -131,17 +131,17 @@ struct i10_host_queue {
 
 	struct page		**caravan2_mapped;
 	int			nr_mapped2;
-
+	//xiugai
 
 	/* For i10 delayed doorbells */
 	int			nr_req;
 	struct hrtimer		doorbell_timer;
 
-
+	//xiugai
 	/* For i10 delayed doorbells2 */
 	int			nr_req2;
 	struct hrtimer		doorbell_timer2;
-
+	//xiugai
 	
 	struct page_frag_cache	pf_cache;
 
@@ -329,7 +329,7 @@ static inline void i10_host_queue_request(struct i10_host_request *req)
 		if(rq_data_dir(blk_mq_rq_from_pdu(req)) == WRITE)
 		{
 			queue->nr_req++;
-			printk(KERN_INFO "332!!!doorbell11");        //123456
+			printk(KERN_INFO "332!!!doorbellwrite");        //123456
 			/* Start a new delayed doorbell timer */
 			if (!hrtimer_active(&queue->doorbell_timer) &&
 				queue->nr_req == 1)
@@ -347,11 +347,10 @@ static inline void i10_host_queue_request(struct i10_host_request *req)
 						&queue->io_work);
 			}
 		}
-		printk(KERN_INFO "350!!!doorbell22?");        //123456/*read doorbell2 work */
 		else
 		{	
+			printk(KERN_INFO "350!!!doorbellread?");        //123456/*read doorbell2 work */           //xiugai
 			queue->nr_req2++;
-			printk(KERN_INFO "354!!!");
 			/* Start a new delayed doorbell timer */
 			if (!hrtimer_active(&queue->doorbell_timer2) &&
 				queue->nr_req2 == 1)
@@ -368,18 +367,20 @@ static inline void i10_host_queue_request(struct i10_host_request *req)
 				queue_work_on(queue->io_cpu, i10_host_wq,
 						&queue->io_work);
 			}
-		}
+		}																							//xiugai
 		
 	}
 	/* Ring the doorbell immediately for no-delay path */
 	else {
 		if(rq_data_dir(blk_mq_rq_from_pdu(req)) == WRITE)
 		{
+			printk(KERN_INFO "ringwritedoorbell!!!immidiate"); //123456
 			if (hrtimer_active(&queue->doorbell_timer))
 			hrtimer_cancel(&queue->doorbell_timer);
 		}
 		else
 		{
+			printk(KERN_INFO "ringreaddoorbell!!!immidiate");  //123456
 			if (hrtimer_active(&queue->doorbell_timer2))
 			hrtimer_cancel(&queue->doorbell_timer2);
 		}
@@ -954,18 +955,18 @@ static void i10_host_fail_request(struct i10_host_request *req)
 
 static inline bool i10_host_is_caravan_full(struct i10_host_queue *queue)
 {
+	printk(KERN_INFO "956!!!caravanfull???");        //123456
 	return (queue->caravan_len >= I10_CARAVAN_CAPACITY) ||
 		(queue->nr_iovs >= I10_AGGREGATION_SIZE * 2) ||
 		(queue->nr_mapped >= I10_AGGREGATION_SIZE);
 }
-static inline bool i10_host_is_caravan2_full(struct i10_host_queue *queue)
+static inline bool i10_host_is_caravan2_full(struct i10_host_queue *queue)					//xiugai
 {
-	printk(KERN_INFO "956!!!full???");        //123456
+	printk(KERN_INFO "963!!!caravan2full???");        //123456
 	return (queue->caravan2_len >= I10_CARAVAN2_CAPACITY) ||
 		(queue->nr_iovs2 >= I10_AGGREGATION_SIZE2 * 2) ||
 		(queue->nr_mapped2 >= I10_AGGREGATION_SIZE2);
-	printk(KERN_INFO "960!!!full");        //123456
-}
+}																				//xiugai
 static int i10_host_try_send_data(struct i10_host_request *req)
 {
 	struct i10_host_queue *queue = req->queue;
@@ -976,7 +977,7 @@ static int i10_host_try_send_data(struct i10_host_request *req)
 		size_t len = i10_host_req_cur_length(req);
 		bool last = i10_host_pdu_last_send(req, len);
 		int ret, flags = MSG_DONTWAIT;
-
+		printk(KERN_INFO "978i10_host_try_send_data");        //123456
 		if (last && !queue->data_digest)
 			flags |= MSG_EOR;
 		else
@@ -1041,46 +1042,51 @@ static int i10_host_try_send_cmd_pdu(struct i10_host_request *req)
 			offset_in_page(pdu) + req->offset, len, flags);		
 	/* read and write IO operation */	
 	else {	
-		printk(KERN_INFO "1044!!!cmdwrite");       //123456/* write IO operation */
 		if(rq_data_dir(blk_mq_rq_from_pdu(req)) == WRITE)
 		{
+			printk(KERN_INFO "1046!!!cmdwrite");       //123456/* write IO operation */
 			if (i10_host_is_caravan_full(queue)) {
 				queue->send_now = true;
 				return 1;
 			}
-			printk(KERN_INFO "1051!!!");        //123456/* Caravans: command PDU aggregation */
+			//printk(KERN_INFO "1051!!!");        //123456/* Caravans: command PDU aggregation */
 			queue->caravan_iovs[queue->nr_iovs].iov_base = pdu
 				+ req->offset;
 			queue->caravan_iovs[queue->nr_iovs++].iov_len = len;
 			queue->caravan_len += len;
 			ret = len;
-
 			if (i10_host_is_nodelay_path(req))
+			{
+				printk(KERN_INFO "!!writenodelay_path");     //123456
 				queue->send_now = true;
+			}
 		}	
-		printk(KERN_INFO "1061!!!cmdread");        //123456/* read IO operation */
 		else
 		{
+			printk(KERN_INFO "1061!!!cmdread");        //123456/* read IO operation */											//xiugai
 			if (i10_host_is_caravan2_full(queue)) {
 				queue->send_now2 = true;
 				return 1;
 			}
-			printk(KERN_INFO "1068!!!");        //123456/* Caravans: command PDU aggregation */
+			//printk(KERN_INFO "1068!!!");        //123456/* Caravans: command PDU aggregation */
 			queue->caravan2_iovs[queue->nr_iovs2].iov_base = pdu
 				+ req->offset;
 			queue->caravan2_iovs[queue->nr_iovs2++].iov_len = len;
 			queue->caravan2_len += len;
 			ret = len;
-			printk(KERN_INFO "1074!!!");        //123456
+			//printk(KERN_INFO "1074!!!");        //123456
 			if (i10_host_is_nodelay_path(req))
+			{
+				printk(KERN_INFO "!!!readnodelay_path");        //123456
 				queue->send_now2 = true;
+			}
 		}
 		printk(KERN_INFO "1078!!!cmdfinish");        //123456
-	}
-
+	}																												//xiugai
+	printk(KERN_INFO "ret %d\n",ret);        //123456
 	if (unlikely(ret <= 0))
 		return ret;
-
+	printk(KERN_INFO "len %d\n",len);        //123456
 	len -= ret;
 	if (!len) {
 		if (inline_data) {
@@ -1105,7 +1111,7 @@ static int i10_host_try_send_data_pdu(struct i10_host_request *req)
 	u8 hdgst = i10_host_hdgst_len(queue);
 	int len = sizeof(*pdu) - req->offset + hdgst;
 	int ret;
-
+	printk(KERN_INFO "1112!!!i10_host_try_send_data_pdu");    //123456
 	if (queue->hdr_digest && !req->offset)
 		i10_host_hdgst(queue->snd_hash, pdu, sizeof(*pdu));
 
@@ -1180,22 +1186,22 @@ static bool i10_host_send_caravan(struct i10_host_queue *queue)
 	 * 2. No-delay request arrives, or
 	 * 3. No more request remains in i10 queue
 	 */
+	printk(KERN_INFO "1183!!!i10_host_send_caravan");        //123456
 	return queue->send_now ||
 		(!hrtimer_active(&queue->doorbell_timer) &&
 		!queue->request && queue->caravan_len);
 }	
 
-static bool i10_host_send_caravan2(struct i10_host_queue *queue)
+static bool i10_host_send_caravan2(struct i10_host_queue *queue)																//xiugai
 {
 	/* 1. Caravan2 becomes full (8MB), or
 	 * 2. No-delay request arrives, or
 	 * 3. No more request remains in i10 queue */
-	printk(KERN_INFO "1193!!!");        //123456
+	printk(KERN_INFO "1193!!!i10_host_send_caravan2");        //123456
 	return queue->send_now2 ||
 		(!hrtimer_active(&queue->doorbell_timer2) &&
 		!queue->request && queue->caravan2_len);
-	printk(KERN_INFO "1197!!!");        //123456
-}	
+}																														//xiugai
 static int i10_host_try_send(struct i10_host_queue *queue)
 {
 	struct i10_host_request *req;
@@ -1203,7 +1209,7 @@ static int i10_host_try_send(struct i10_host_queue *queue)
 
 	if (!queue->request) {
 		queue->request = i10_host_fetch_request(queue);
-		if (!queue->request && !queue->caravan_len)
+		if (!queue->request && !queue->caravan_len && !queue->caravan2_len)     ///123456 warning
 			return 0;
 	}
 
@@ -1211,7 +1217,7 @@ static int i10_host_try_send(struct i10_host_queue *queue)
 	if (i10_host_send_caravan(queue)) {
 		struct msghdr msg = { .msg_flags = MSG_DONTWAIT | MSG_EOR };
 		int i, i10_ret;
-
+		printk(KERN_INFO "1218!!send_caravan!!!");        //123456
 		if (i10_host_sndbuf_nospace(queue, queue->caravan_len)) {
 			set_bit(SOCK_NOSPACE,
 				&queue->sock->sk->sk_socket->flags);
@@ -1232,15 +1238,14 @@ static int i10_host_try_send(struct i10_host_queue *queue)
 
 		for (i = 0; i < queue->nr_mapped; i++)
 			kunmap(queue->caravan_mapped[i]);
-
+		printk(KERN_INFO "1218!!send_caravanfinish!!!");        //123456
 		queue->nr_req = 0;
 		queue->nr_iovs = 0;
 		queue->nr_mapped = 0;
 		queue->caravan_len = 0;
 		queue->send_now = false;
 	}
-
-	/* Send i10 caravans2 now */
+	/* Send i10 caravans2 now */																							//xiugai
 	if (i10_host_send_caravan2(queue)) {
 		struct msghdr msg2 = { .msg_flags = MSG_DONTWAIT | MSG_EOR };
 		int i2, i10_ret2;
@@ -1272,7 +1277,7 @@ static int i10_host_try_send(struct i10_host_queue *queue)
 		queue->caravan2_len = 0;
 		queue->send_now2 = false;
 	}
-	printk(KERN_INFO "1275!!!");        //123456
+	printk(KERN_INFO "1275!!!");        //123456																					//xiugai
 	if (queue->request)
 		req = queue->request;
 	else
@@ -1325,20 +1330,20 @@ enum hrtimer_restart i10_host_doorbell_timeout(struct hrtimer *timer)
 	struct i10_host_queue *queue =
 		container_of(timer, struct i10_host_queue,
 			doorbell_timer);
-
+	printk(KERN_INFO "1327!!!");        //123456
 	queue_work_on(queue->io_cpu, i10_host_wq, &queue->io_work);
 	return HRTIMER_NORESTART;
 }
 
-enum hrtimer_restart i10_host_doorbell_timeout2(struct hrtimer *timer)
+enum hrtimer_restart i10_host_doorbell_timeout2(struct hrtimer *timer)												//xiugai
 {
 	struct i10_host_queue *queue =
 		container_of(timer, struct i10_host_queue,
 			doorbell_timer2);
-	printk(KERN_INFO "1338!!!");        //123456
+	printk(KERN_INFO "1338!!!i10_host_doorbell_timeout2");        //123456
 	queue_work_on(queue->io_cpu, i10_host_wq, &queue->io_work);
 	return HRTIMER_NORESTART;
-}
+}																												//xiugai
 
 static void i10_host_io_work(struct work_struct *w)
 {
@@ -1349,9 +1354,10 @@ static void i10_host_io_work(struct work_struct *w)
 	do {
 		bool pending = false;
 		int result;
-
+		printk(KERN_INFO "start to send");        //123456
 		result = i10_host_try_send(queue);
 		if (result > 0) {
+			printk(KERN_INFO "pending");        //123456
 			pending = true;
 		} else if (unlikely(result < 0)) {
 			dev_err(queue->ctrl->ctrl.device,
@@ -1361,11 +1367,11 @@ static void i10_host_io_work(struct work_struct *w)
 			i10_host_done_send_req(queue);
 			return;
 		}
-
+		printk(KERN_INFO "start to recv");        //123456
 		result = i10_host_try_recv(queue);
 		if (result > 0)
 			pending = true;
-
+		printk(KERN_INFO "restart one io");        //123456
 		if (!pending)
 			return;
 
@@ -1442,12 +1448,12 @@ static void i10_host_free_queue(struct nvme_ctrl *nctrl, int qid)
 
 	if (queue->hdr_digest || queue->data_digest)
 		i10_host_free_crypto(queue);
-
+	printk(KERN_INFO "free queue %d\n",qid);        //123456
 	sock_release(queue->sock);
 	kfree(queue->pdu);
 	kfree(queue->caravan_iovs);
 	kfree(queue->caravan_mapped);
-	printk(KERN_INFO "1450!!!");        //123456
+	printk(KERN_INFO "1450!!!");        //123456																	//xiugai
 	hrtimer_cancel(&queue->doorbell_timer);
 	kfree(queue->caravan2_iovs);
 	printk(KERN_INFO "1453!!!");        //123456
@@ -1455,7 +1461,7 @@ static void i10_host_free_queue(struct nvme_ctrl *nctrl, int qid)
 	printk(KERN_INFO "1455!!!");        //123456
 	hrtimer_cancel(&queue->doorbell_timer2);
 	printk(KERN_INFO "1457!!!");        //123456
-}
+}																												//xiugai
 
 static int i10_host_init_connection(struct i10_host_queue *queue)
 {
@@ -1675,7 +1681,7 @@ static int i10_host_alloc_queue(struct nvme_ctrl *nctrl,
 	queue->caravan_len = 0;
 	queue->send_now = false;
 
-	/* caravan2 initialization */     //111111
+	/* caravan2 initialization */     //111111																			//xiugai
 	queue->caravan2_iovs = kcalloc(I10_AGGREGATION_SIZE2 * 2,
 				sizeof(*queue->caravan2_iovs), GFP_KERNEL);
 	if (!queue->caravan2_iovs) {
@@ -1695,15 +1701,15 @@ static int i10_host_alloc_queue(struct nvme_ctrl *nctrl,
 	queue->nr_mapped2 = 0;
 	queue->caravan2_len = 0;
 	queue->send_now2 = false;	    //999999
-	printk(KERN_INFO "1681!!!one");        //123456
+	printk(KERN_INFO "1681!!!one");        //123456																		//xiugai
 	/* i10 delayed doorbell setup */
 	hrtimer_init(&queue->doorbell_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	queue->doorbell_timer.function = &i10_host_doorbell_timeout;
 
-	/* caravan2 delayed doorbell setup */
+	/* caravan2 delayed doorbell setup */																			//xiugai
 	hrtimer_init(&queue->doorbell_timer2, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	queue->doorbell_timer2.function = &i10_host_doorbell_timeout2;
-	printk(KERN_INFO "1700!!!two");        //123456
+	printk(KERN_INFO "1700!!!two");        //123456																	//xiugai
 	queue->hdr_digest = nctrl->opts->hdr_digest;
 	queue->data_digest = nctrl->opts->data_digest;
 	if (queue->hdr_digest || queue->data_digest) {
@@ -1761,15 +1767,15 @@ err_rcv_pdu:
 err_crypto:
 	if (queue->hdr_digest || queue->data_digest)
 		i10_host_free_crypto(queue);
-err_caravan2_mapped:
+err_caravan2_mapped:																	//xiugai
 	kfree(queue->caravan2_mapped);
-	printk(KERN_INFO "1762!!!");        //123456
+	printk(KERN_INFO "1762!!!");        //123456															
 err_caravan2_iovs:
 	kfree(queue->caravan2_iovs);
 	printk(KERN_INFO "1765!!!");        //123456
 err_caravan_mapped:
 	kfree(queue->caravan_mapped);
-	printk(KERN_INFO "1768!!!");        //123456
+	printk(KERN_INFO "1768!!!");        //123456										//xiugai
 err_caravan_iovs:
 	kfree(queue->caravan_iovs);
 err_sock:
@@ -1781,7 +1787,7 @@ err_sock:
 static void i10_host_restore_sock_calls(struct i10_host_queue *queue)
 {
 	struct socket *sock = queue->sock;
-
+	printk(KERN_INFO "i10_host_restore_sock_calls");        //123456
 	write_lock_bh(&sock->sk->sk_callback_lock);
 	sock->sk->sk_user_data  = NULL;
 	sock->sk->sk_data_ready = queue->data_ready;
@@ -1792,6 +1798,7 @@ static void i10_host_restore_sock_calls(struct i10_host_queue *queue)
 
 static void __i10_host_stop_queue(struct i10_host_queue *queue)
 {
+	printk(KERN_INFO "__i10_host_stop_queue");        //123456
 	kernel_sock_shutdown(queue->sock, SHUT_RDWR);
 	i10_host_restore_sock_calls(queue);
 	cancel_work_sync(&queue->io_work);
@@ -1801,7 +1808,7 @@ static void i10_host_stop_queue(struct nvme_ctrl *nctrl, int qid)
 {
 	struct i10_host_ctrl *ctrl = to_i10_host_ctrl(nctrl);
 	struct i10_host_queue *queue = &ctrl->queues[qid];
-
+	printk(KERN_INFO "i10_host_stop_queue");        //123456
 	if (!test_and_clear_bit(I10_HOST_Q_LIVE, &queue->flags))
 		return;
 
@@ -1873,14 +1880,14 @@ static void i10_host_free_admin_queue(struct nvme_ctrl *ctrl)
 		i10_host_free_async_req(to_i10_host_ctrl(ctrl));
 		to_i10_host_ctrl(ctrl)->async_req.pdu = NULL;
 	}
-
+	printk(KERN_INFO "i10_host_free_admin_queue");        //123456
 	i10_host_free_queue(ctrl, 0);
 }
 
 static void i10_host_free_io_queues(struct nvme_ctrl *ctrl)
 {
 	int i;
-
+	printk(KERN_INFO "i10_host_free_io_queues");        //123456
 	for (i = 1; i < ctrl->queue_count; i++)
 		i10_host_free_queue(ctrl, i);
 }
@@ -1888,7 +1895,7 @@ static void i10_host_free_io_queues(struct nvme_ctrl *ctrl)
 static void i10_host_stop_io_queues(struct nvme_ctrl *ctrl)
 {
 	int i;
-
+	printk(KERN_INFO "i10_host_stop_io_queues");        //123456
 	for (i = 1; i < ctrl->queue_count; i++)
 		i10_host_stop_queue(ctrl, i);
 }
@@ -1896,7 +1903,7 @@ static void i10_host_stop_io_queues(struct nvme_ctrl *ctrl)
 static int i10_host_start_io_queues(struct nvme_ctrl *ctrl)
 {
 	int i, ret = 0;
-
+	printk(KERN_INFO "i10_host_start_io_queues");        //123456
 	for (i = 1; i < ctrl->queue_count; i++) {
 		ret = i10_host_start_queue(ctrl, i);
 		if (ret)
@@ -1977,6 +1984,7 @@ static int nvme_alloc_io_queues(struct nvme_ctrl *ctrl)
 
 static void i10_host_destroy_io_queues(struct nvme_ctrl *ctrl, bool remove)
 {
+	printk(KERN_INFO "i10_host_destroy_io_queues");        //123456
 	i10_host_stop_io_queues(ctrl);
 	if (remove) {
 		if (ctrl->ops->flags & NVME_F_FABRICS)
@@ -1989,7 +1997,7 @@ static void i10_host_destroy_io_queues(struct nvme_ctrl *ctrl, bool remove)
 static int i10_host_configure_io_queues(struct nvme_ctrl *ctrl, bool new)
 {
 	int ret;
-
+	printk(KERN_INFO "i10_host_configure_io_queues");        //123456
 	ret = nvme_alloc_io_queues(ctrl);
 	if (ret)
 		return ret;
@@ -2016,7 +2024,7 @@ static int i10_host_configure_io_queues(struct nvme_ctrl *ctrl, bool new)
 	ret = i10_host_start_io_queues(ctrl);
 	if (ret)
 		goto out_cleanup_connect_q;
-
+	printk(KERN_INFO "i10_host_configureioqueue  ok!!!");        //123456
 	return 0;
 
 out_cleanup_connect_q:
@@ -2032,6 +2040,7 @@ out_free_io_queues:
 
 static void i10_host_destroy_admin_queue(struct nvme_ctrl *ctrl, bool remove)
 {
+	printk(KERN_INFO "i10_host_destroy_admin_queue");        //123456
 	i10_host_stop_queue(ctrl, 0);
 	if (remove) {
 		free_opal_dev(ctrl->opal_dev);
@@ -2044,7 +2053,7 @@ static void i10_host_destroy_admin_queue(struct nvme_ctrl *ctrl, bool remove)
 static int i10_host_configure_admin_queue(struct nvme_ctrl *ctrl, bool new)
 {
 	int error;
-
+	printk(KERN_INFO "i10_host_configure_admin_queue");        //123456
 	error = i10_host_alloc_admin_queue(ctrl);
 	if (error)
 		return error;
@@ -2102,6 +2111,7 @@ out_free_queue:
 static void i10_host_teardown_admin_queue(struct nvme_ctrl *ctrl,
 		bool remove)
 {
+	printk(KERN_INFO "i10_host_teardown_admin_queue");        //123456
 	blk_mq_quiesce_queue(ctrl->admin_q);
 	i10_host_stop_queue(ctrl, 0);
 	blk_mq_tagset_busy_iter(ctrl->admin_tagset, nvme_cancel_request, ctrl);
@@ -2112,6 +2122,7 @@ static void i10_host_teardown_admin_queue(struct nvme_ctrl *ctrl,
 static void i10_host_teardown_io_queues(struct nvme_ctrl *ctrl,
 		bool remove)
 {
+	printk(KERN_INFO "i10_host_teardown_io_queues");        //123456
 	if (ctrl->queue_count <= 1)
 		return;
 	nvme_stop_queues(ctrl);
@@ -2130,7 +2141,7 @@ static void i10_host_reconnect_or_remove(struct nvme_ctrl *ctrl)
 			ctrl->state == NVME_CTRL_LIVE);
 		return;
 	}
-
+	printk(KERN_INFO "i10_host_reconnect_or_remove");        //123456
 	if (nvmf_should_reconnect(ctrl)) {
 		dev_info(ctrl->device, "Reconnecting in %d seconds...\n",
 			ctrl->opts->reconnect_delay);
@@ -2180,7 +2191,7 @@ static int i10_host_setup_ctrl(struct nvme_ctrl *ctrl, bool new)
 		ret = -EINVAL;
 		goto destroy_io;
 	}
-
+	printk(KERN_INFO "nvme_start_ctrl!!!");        //123456
 	nvme_start_ctrl(ctrl);
 	return 0;
 
@@ -2198,7 +2209,7 @@ static void i10_host_reconnect_ctrl_work(struct work_struct *work)
 	struct i10_host_ctrl *tcp_ctrl = container_of(to_delayed_work(work),
 			struct i10_host_ctrl, connect_work);
 	struct nvme_ctrl *ctrl = &tcp_ctrl->ctrl;
-
+	printk(KERN_INFO "i10_host_reconnect_ctrl_work");        //123456
 	++ctrl->nr_reconnects;
 
 	if (i10_host_setup_ctrl(ctrl, false))
@@ -2222,7 +2233,7 @@ static void i10_host_error_recovery_work(struct work_struct *work)
 	struct i10_host_ctrl *tcp_ctrl = container_of(work,
 				struct i10_host_ctrl, err_work);
 	struct nvme_ctrl *ctrl = &tcp_ctrl->ctrl;
-
+	printk(KERN_INFO "i10_host_error_recovery_work");        //123456
 	nvme_stop_keep_alive(ctrl);
 	i10_host_teardown_io_queues(ctrl, false);
 	/* unquiesce to fail fast pending requests */
@@ -2240,6 +2251,7 @@ static void i10_host_error_recovery_work(struct work_struct *work)
 
 static void i10_host_teardown_ctrl(struct nvme_ctrl *ctrl, bool shutdown)
 {
+	printk(KERN_INFO "i10_host_teardown_ctrl");        //123456
 	i10_host_teardown_io_queues(ctrl, shutdown);
 	if (shutdown)
 		nvme_shutdown_ctrl(ctrl);
@@ -2250,6 +2262,7 @@ static void i10_host_teardown_ctrl(struct nvme_ctrl *ctrl, bool shutdown)
 
 static void i10_host_delete_ctrl(struct nvme_ctrl *ctrl)
 {
+	printk(KERN_INFO "i10_host_delete_ctrl");        //123456
 	i10_host_teardown_ctrl(ctrl, true);
 }
 
@@ -2260,7 +2273,7 @@ static void nvme_reset_ctrl_work(struct work_struct *work)
 
 	nvme_stop_ctrl(ctrl);
 	i10_host_teardown_ctrl(ctrl, false);
-
+	printk(KERN_INFO "nvme_reset_ctrl_work");        //123456
 	if (!nvme_change_ctrl_state(ctrl, NVME_CTRL_CONNECTING)) {
 		/* state change failure is ok if we're in DELETING state */
 		WARN_ON_ONCE(ctrl->state != NVME_CTRL_DELETING);
@@ -2279,6 +2292,7 @@ out_fail:
 
 static void i10_host_stop_ctrl(struct nvme_ctrl *ctrl)
 {
+	printk(KERN_INFO "i10_host_stop_ctrl");        //123456
 	cancel_work_sync(&to_i10_host_ctrl(ctrl)->err_work);
 	cancel_delayed_work_sync(&to_i10_host_ctrl(ctrl)->connect_work);
 }
@@ -2289,7 +2303,7 @@ static void i10_host_free_ctrl(struct nvme_ctrl *nctrl)
 
 	if (list_empty(&ctrl->list))
 		goto free_ctrl;
-
+	printk(KERN_INFO "i10_host_free_ctrl");        //123456
 	mutex_lock(&i10_host_ctrl_mutex);
 	list_del(&ctrl->list);
 	mutex_unlock(&i10_host_ctrl_mutex);
@@ -2303,7 +2317,7 @@ free_ctrl:
 static void i10_host_set_sg_null(struct nvme_command *c)
 {
 	struct nvme_sgl_desc *sg = &c->common.dptr.sgl;
-
+	printk(KERN_INFO "i10_host_set_sg_null");        //123456
 	sg->addr = 0;
 	sg->length = 0;
 	sg->type = (NVME_TRANSPORT_SGL_DATA_DESC << 4) |
@@ -2338,7 +2352,7 @@ static void i10_host_submit_async_event(struct nvme_ctrl *arg)
 	struct nvme_tcp_cmd_pdu *pdu = ctrl->async_req.pdu;
 	struct nvme_command *cmd = &pdu->cmd;
 	u8 hdgst = i10_host_hdgst_len(queue);
-
+	printk(KERN_INFO "i10_host_submit_async_event");        //123456
 	memset(pdu, 0, sizeof(*pdu));
 	pdu->hdr.type = nvme_tcp_cmd;
 	if (queue->hdr_digest)
@@ -2365,7 +2379,7 @@ i10_host_timeout(struct request *rq, bool reserved)
 	struct i10_host_request *req = blk_mq_rq_to_pdu(rq);
 	struct i10_host_ctrl *ctrl = req->queue->ctrl;
 	struct nvme_tcp_cmd_pdu *pdu = req->pdu;
-
+	printk(KERN_INFO "queue %d:timeout",i10_host_queue_id(req->queue));     //123
 	dev_dbg(ctrl->ctrl.device,
 		"queue %d: timeout request %#x type %d\n",
 		i10_host_queue_id(req->queue), rq->tag,
@@ -2411,7 +2425,7 @@ static blk_status_t i10_host_setup_cmd_pdu(struct nvme_ns *ns,
 	struct i10_host_queue *queue = req->queue;
 	u8 hdgst = i10_host_hdgst_len(queue), ddgst = 0;
 	blk_status_t ret;
-
+	printk(KERN_INFO "i10_host_setup_cmd_pdu");        //123456
 	ret = nvme_setup_cmd(ns, rq, &pdu->cmd);
 	if (ret)
 		return ret;
@@ -2645,7 +2659,6 @@ static int __init i10_host_init_module(void)
 	nvmf_register_transport(&i10_host_transport);
 	return 0;
 }
-
 
 static void __exit i10_host_cleanup_module(void)
 {
