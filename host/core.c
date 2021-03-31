@@ -3547,8 +3547,10 @@ EXPORT_SYMBOL_GPL(nvme_stop_ctrl);
 void nvme_start_ctrl(struct nvme_ctrl *ctrl)
 {
 	if (ctrl->kato)
+	{
+		printk(KERN_INFO "nvme_start_keep_alive");        //123456
 		nvme_start_keep_alive(ctrl);
-
+	}
 	if (ctrl->queue_count > 1) {
 		nvme_queue_scan(ctrl);
 		nvme_enable_aen(ctrl);
